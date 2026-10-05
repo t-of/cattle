@@ -9,7 +9,7 @@
 // ブラウザの HTTP キャッシュを通さない（install は reload、fetch は no-cache）。古い main.js と新しい index.html が混ざって動かなくなるのを防ぐ。
 
 const PREFIX = 'cattle-';
-const VERSION = 'v2';
+const VERSION = 'v3';
 const CACHE = `${PREFIX}${VERSION}`;
 const FONT_CACHE = `${PREFIX}fonts`;
 
@@ -18,6 +18,9 @@ const SHELL = [
   './index.html',
   './style.css',
   './main.js',
+  './rules.mjs',
+  './search.mjs',
+  './cpu.js',
   './board3d.js',
   './vendor/three.module.min.js',
   './vendor/OrbitControls.js',
