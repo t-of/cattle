@@ -2,7 +2,7 @@ import { createBoard3D } from './board3d.js';
 import { buildGraph, createInitialState, applyMove, ufoActions, sheepMovableFrom } from './rules.mjs';
 
 // cattle: ハニカムの頂点を点・辺とする盤での非対称 2 人対戦。
-// 2 人で同じ端末を交互に操作するほか、CPU（飛行物体側 or 羊側）とも対戦できる。
+// 2 人で同じ端末を交互に操作するほか、CPU（飛行物体側 or 羊側）とも対戦でき、CPU 同士の対戦も見られる。
 // ルールの中身（合法手・手の適用・勝敗）は rules.mjs に持たせ、CPU の Worker（cpu.js）・
 // 自己検査テスト（test/cpu-selftest.mjs）と共有する。main.js はここでは盤と手番の UI だけを持つ。
 
@@ -19,7 +19,7 @@ const graph = buildGraph();
 function loadMode() {
   try {
     const v = localStorage.getItem('cattle.mode');
-    if (v === 'pvp' || v === 'cpu-ufo' || v === 'cpu-sheep') return v;
+    if (v === 'pvp' || v === 'cpu-ufo' || v === 'cpu-sheep' || v === 'cpu-cpu') return v;
   } catch { /* 読めなくても既定を使う */ }
   return 'cpu-ufo';
 }
@@ -27,9 +27,9 @@ function saveMode(v) {
   try { localStorage.setItem('cattle.mode', v); } catch { /* 容量超過・プライベートモードなどは諦める */ }
 }
 
-let mode = loadMode(); // 'pvp' | 'cpu-ufo'（CPU が飛行物体） | 'cpu-sheep'（CPU が羊）
+let mode = loadMode(); // 'pvp' | 'cpu-ufo'（CPU が飛行物体） | 'cpu-sheep'（CPU が羊） | 'cpu-cpu'（見るだけ）
 function cpuControls(phase) {
-  return (mode === 'cpu-ufo' && phase === 'ufo') || (mode === 'cpu-sheep' && phase === 'sheep');
+  return mode === 'cpu-cpu' || (mode === 'cpu-ufo' && phase === 'ufo') || (mode === 'cpu-sheep' && phase === 'sheep');
 }
 
 // ---- ゲームの状態 ----
@@ -40,12 +40,14 @@ let selected; // null | {kind:'sheep', id} | {kind:'ufo', id}
 let notice;
 let cpuThinking = false;
 let cpuWorker = null;
+let gameNo = 0; // 途中でやめて新しく始めたとき、前の対局の CPU の返事を捨てるための番号
 
 function newGame() {
   state = createInitialState(graph);
   selected = null;
   notice = '';
   cpuThinking = false;
+  gameNo++;
   render();
   maybeRunCpu();
 }
@@ -59,7 +61,8 @@ const CPU_TIME_MS = 1500;
 const CPU_MIN_DELAY_MS = 400; // CPU の手が一瞬で決まっても、少し間をおいて見せる
 
 function maybeRunCpu() {
-  if (state.winner || !cpuControls(state.phase)) return;
+  if (state.winner || !cpuControls(state.phase) || !modeOverlay.hidden) return;
+  const no = gameNo;
   cpuThinking = true;
   render();
   const startedAt = Date.now();
@@ -68,6 +71,7 @@ function maybeRunCpu() {
     const move = e.data.move;
     const wait = Math.max(0, CPU_MIN_DELAY_MS - (Date.now() - startedAt));
     setTimeout(() => {
+      if (no !== gameNo) return;
       cpuThinking = false;
       if (move) {
         state = applyMove(graph, state, move);
@@ -146,6 +150,7 @@ stage.innerHTML = `
     <div class="hud">
       <p class="hud__turn" id="turnLabel"></p>
       <p class="hud__sub" id="subLabel"></p>
+      <button class="pill" id="stop" hidden>やめる</button>
     </div>
     <div id="board3d" class="board"></div>
     <p class="notice" id="notice"></p>
@@ -158,6 +163,7 @@ stage.innerHTML = `
       <button class="pill pill--accent" data-mode="cpu-ufo">CPU が飛行物体（あなたが羊）</button>
       <button class="pill pill--accent" data-mode="cpu-sheep">CPU が羊（あなたが飛行物体）</button>
       <button class="pill" data-mode="pvp">2 人で</button>
+      <button class="pill" data-mode="cpu-cpu">CPU 同士（見るだけ）</button>
     </div>
   </div>
 `;
@@ -168,6 +174,8 @@ const winOverlay = document.getElementById('winOverlay');
 const winText = document.getElementById('winText');
 const modeOverlay = document.getElementById('modeOverlay');
 
+const stopBtn = document.getElementById('stop');
+stopBtn.addEventListener('click', () => { gameNo++; cpuThinking = false; modeOverlay.hidden = false; render(); });
 document.getElementById('again').addEventListener('click', () => { winOverlay.hidden = true; modeOverlay.hidden = false; });
 modeOverlay.querySelectorAll('[data-mode]').forEach((btn) => {
   btn.addEventListener('click', () => {
@@ -197,12 +205,13 @@ function render() {
     winOverlay.hidden = false;
   } else {
     winOverlay.hidden = true;
-    const who = cpuThinking ? 'CPU' : (state.phase === 'sheep' ? '羊' : '飛行物体');
-    turnLabel.textContent = cpuThinking ? '考え中…' : `${who}の番`;
+    const who = cpuThinking && mode !== 'cpu-cpu' ? 'CPU' : (state.phase === 'sheep' ? '羊' : '飛行物体');
+    turnLabel.textContent = cpuThinking ? (mode === 'cpu-cpu' ? `${who}が考え中…` : '考え中…') : `${who}の番`;
     subLabel.textContent = `手元の羊 ${state.sheepInHand} 匹 ・ 連れ去られた羊 ${abducted}/3`;
   }
   noticeEl.textContent = notice;
+  stopBtn.hidden = mode !== 'cpu-cpu' || !!state.winner || !modeOverlay.hidden;
 }
 
+modeOverlay.hidden = false; // 開始時にも対戦方式を選べるようにする（選ぶまで CPU は動かさない）
 newGame();
-modeOverlay.hidden = false; // 開始時にも対戦方式を選べるようにする
