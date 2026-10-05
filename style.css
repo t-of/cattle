@@ -67,23 +67,9 @@ button { font: inherit; color: inherit; }
 .hud__turn { margin: 0; font-size: 20px; font-weight: 700; }
 .hud__sub { margin: 4px 0 0; font-size: 13px; color: var(--muted); }
 
-.board { width: 100%; height: auto; touch-action: manipulation; }
+.board { width: 100%; aspect-ratio: 1 / 1; max-height: 68dvh; }
+.board canvas { display: block; width: 100%; height: 100%; touch-action: none; }
 
-.edge { stroke: rgba(255, 255, 255, 0.28); stroke-width: 1.5; }
-
-.dot { fill: rgba(255, 255, 255, 0.35); }
-.dot--move { fill: var(--accent); }
-.dot--abduct { fill: #ff7a6b; }
-.dot--beam { fill: #7ac2ff; }
-
-.sheep { fill: #f5f3ee; stroke: rgba(0, 0, 0, 0.2); stroke-width: 1; }
-.sheep--small { stroke: rgba(0, 0, 0, 0.3); }
-.sheep--target { fill: #7ac2ff; }
-
-.ufo { fill: #8a8f99; stroke: rgba(0, 0, 0, 0.25); stroke-width: 1; }
-.ufo--selected { fill: var(--accent); }
-
-.hit { fill: transparent; cursor: pointer; }
 
 .notice { min-height: 1.2em; font-size: 13px; color: var(--accent); text-align: center; margin: 0; }
 

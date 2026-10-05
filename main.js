@@ -1,4 +1,4 @@
-'use strict';
+import { createBoard3D } from './board3d.js';
 
 // cattle: ハニカムの頂点を点・辺とする盤での非対称 2 人対戦（同じ端末で交互に操作）。
 // localStorage は使わない（記録を残さない試作のため）。
@@ -17,6 +17,8 @@ const HEX = 36; // 六角形の外接半径（px）
 const verts = [];
 /** @type {Map<number, Set<number>>} */
 const edges = new Map();
+/** @type {{x:number, y:number}[]} 六角形の中心（3D の地面用） */
+const cells = [];
 
 (function buildBoard() {
   const key2id = new Map();
@@ -39,6 +41,7 @@ const edges = new Map();
       if (Math.abs(q + r) > 2) continue;
       const cx = HEX * Math.sqrt(3) * (q + r / 2);
       const cy = HEX * 1.5 * r;
+      cells.push({ x: cx, y: cy });
       const corners = [];
       for (let i = 0; i < 6; i++) {
         const ang = (Math.PI / 180) * (60 * i - 30);
@@ -238,7 +241,7 @@ stage.innerHTML = `
       <p class="hud__turn" id="turnLabel"></p>
       <p class="hud__sub" id="subLabel"></p>
     </div>
-    <svg id="svg" viewBox="0 0 10 10" class="board"></svg>
+    <div id="board3d" class="board"></div>
     <p class="notice" id="notice"></p>
     <div class="win-overlay" id="winOverlay" hidden>
       <p class="win-text" id="winText"></p>
@@ -246,7 +249,6 @@ stage.innerHTML = `
     </div>
   </div>
 `;
-const svg = document.getElementById('svg');
 const turnLabel = document.getElementById('turnLabel');
 const subLabel = document.getElementById('subLabel');
 const noticeEl = document.getElementById('notice');
@@ -254,27 +256,7 @@ const winOverlay = document.getElementById('winOverlay');
 const winText = document.getElementById('winText');
 document.getElementById('again').addEventListener('click', newGame);
 
-{
-  const xs = verts.map((v) => v.x), ys = verts.map((v) => v.y);
-  const pad = HEX;
-  const minX = Math.min(...xs) - pad, minY = Math.min(...ys) - pad;
-  const w = Math.max(...xs) - minX + pad, h = Math.max(...ys) - minY + pad;
-  svg.setAttribute('viewBox', `${minX} ${minY} ${w} ${h}`);
-}
-
-svg.addEventListener('pointerdown', (e) => {
-  const el = e.target.closest('[data-vid]');
-  if (!el) return;
-  onVertexTap(Number(el.dataset.vid));
-});
-
-function ufoHatPath(x, y) {
-  const r = 15;
-  return `M ${x - r} ${y + r * 0.6}
-          Q ${x - r} ${y - r} ${x} ${y - r}
-          Q ${x + r} ${y - r} ${x + r} ${y + r * 0.6}
-          Z`;
-}
+const draw3D = createBoard3D(document.getElementById('board3d'), { verts, edges, cells, hex: HEX }, onVertexTap);
 
 function render() {
   const a = selected && selected.kind === 'ufo' ? ufoActions(ufos[selected.id].pos, ufos[selected.id].loaded) : null;
@@ -283,40 +265,7 @@ function render() {
   const beamSet = a ? new Set(a.beams.keys()) : new Set();
   const sheepMoveSet = selected && selected.kind === 'sheep' ? new Set(sheepMovableFrom(selected.id)) : new Set();
 
-  let edgeSvg = '';
-  for (const [v1, set] of edges) {
-    for (const v2 of set) {
-      if (v2 < v1) continue;
-      const p1 = verts[v1], p2 = verts[v2];
-      edgeSvg += `<line x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}" class="edge"/>`;
-    }
-  }
-
-  let nodeSvg = '';
-  for (const v of verts) {
-    const occ = board.get(v.id);
-    let cls = 'dot';
-    if (moveSet.has(v.id)) cls = 'dot dot--move';
-    else if (abductSet.has(v.id)) cls = 'dot dot--abduct';
-    else if (beamSet.has(v.id)) cls = 'dot dot--beam';
-    else if (sheepMoveSet.has(v.id)) cls = 'dot dot--move';
-
-    nodeSvg += `<circle cx="${v.x}" cy="${v.y}" r="4" class="${cls}"/>`;
-
-    if (occ && occ.type === 'sheep') {
-      const isBeamTarget = beamSet.has(v.id);
-      nodeSvg += `<circle cx="${v.x}" cy="${v.y}" r="12" class="${isBeamTarget ? 'sheep sheep--target' : 'sheep'}"/>`;
-    } else if (occ && occ.type === 'ufo') {
-      const u = occ.ufo;
-      const isSel = selected && selected.kind === 'ufo' && selected.id === u.id;
-      nodeSvg += `<path d="${ufoHatPath(v.x, v.y)}" class="${isSel ? 'ufo ufo--selected' : 'ufo'}"/>`;
-      if (u.loaded) nodeSvg += `<circle cx="${v.x}" cy="${v.y - 15}" r="6" class="sheep sheep--small"/>`;
-    }
-
-    nodeSvg += `<circle cx="${v.x}" cy="${v.y}" r="16" class="hit" data-vid="${v.id}"/>`;
-  }
-
-  svg.innerHTML = edgeSvg + nodeSvg;
+  draw3D({ board, selected, moveSet: new Set([...moveSet, ...sheepMoveSet]), abductSet, beamSet });
 
   const abducted = ufos.filter((u) => u.loaded).length;
   if (winner) {
